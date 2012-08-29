@@ -16,7 +16,7 @@ module Tracer = struct
     else (if (f a) then true else exists f (a+1) b)
 
   let (=>) a b =
-    if a then b else a
+    (not a) or b
 
 
 
