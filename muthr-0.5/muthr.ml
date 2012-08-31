@@ -429,7 +429,7 @@ let sched () =
   in
   enqueue (ref Nofd, [], check_io);
   try
-    while true do
+    while (Queue.length runq) > 1 do
       term := true;
       let (l, c, f) as p = dequeue () in begin
 	dbg_ctxt c;
@@ -458,7 +458,8 @@ let sched () =
 	    if !term then context_msg "trywith done!" c' t
       end;
       flush stdout
-    done
+    done;
+    Queue.clear runq
   with Stop -> () (* ZZZ empty runq and other data structs? *)
 
 

@@ -8,14 +8,14 @@ LIBDIR=/usr/local/lib/ocaml
 
 .PHONY: all install clean htmldoc
 
-all: clean muthr muthr_retry muthr_misc
+all: clean muthr muthr_retry muthr_misc muthr_tests
 
 install:
 	cp muthr.cma muthr.cmi muthr_retry.cma muthr_retry.cmi muthr_misc.cma muthr_misc.cmi $(LIBDIR)
 	cp muthr.a muthr.cmxa muthr_retry.a muthr_retry.cmxa muthr_misc.a muthr_misc.cmxa $(LIBDIR)
 
 clean:
-	rm -f *.cmo *.cmi *.cma *.cmx *.cmxa *.a *.o *.dvi *.ps *.log *.aux
+	rm -f *.cmo *.cmi *.cma *.cmx *.cmxa *.a *.o *.dvi *.ps *.log *.aux muthr_tests
 
 htmldoc: muthr.mli muthr_retry.mli
 	ocamldoc -html -d ../HtmlDoc $^
@@ -35,10 +35,13 @@ muthr_retry.dvi: muthr_retry.mli
 %.ps : %.dvi
 	dvips $<
 
-.PHONY: muthr muthr_retry muthr_misc
+.PHONY: muthr muthr_retry muthr_misc muthr_tests
 muthr: muthr.cmi muthr.cma muthr.cmxa
 muthr_retry: muthr_retry.cmi muthr_retry.cma muthr_retry.cmxa
 muthr_misc: muthr_misc.cmi muthr_misc.cma muthr_misc.cmxa
+
+muthr_tests: muthr_tests.ml muthr
+	ocamlfind ocamlc -package oUnit -linkpkg -g muthr.cma muthr_tests.ml -o $@
 
 %.cmo : %.ml %.cmi
 	$(OCAMLC) -c $<
