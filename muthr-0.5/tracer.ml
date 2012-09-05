@@ -26,7 +26,7 @@ module Tracer = struct
 
 
   let (|=) ((pi,i) : pointed_word) (phi : formula) =
-    phi (pi,i)
+    phi (pi,i) (*bug if i>len pi; should ret. false then*)
 
 
   (* base =======================================================================================*)
