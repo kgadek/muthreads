@@ -1,0 +1,355 @@
+codes ERR : /usr/include/asm-generic/errno-base.h et errno.h
+
+pages de man read et write "Other errors may occur"...
+
+Caml : compter les erreurs dans unix.mli à partir de 0 s'arrêter au
+numéro affiché (ici ECONNRESET est en position 56)
+
+en lançant cftp -p 3000 localhost
+non reproductible !
+
+< 220 Welcome to muthreads ftp server
+
+> user ftp
+
+< 331 ...
+
+> pass anonymous@
+
+< 230 ...
+
+> pwd
+
+< 257 /tmp
+
+> type A
+
+< 200 ...
+
+> cwd /
+
+< 250 ...
+
+> port 127,0,0,1,226,6
+
+< 200 ...
+
+> list
+
+< 150 ...
+
+< 226 ...
+
+Fatal error: exception Unix.Unix_error(56, "read", "")
+
+--> client perd les pédales et envoie un RST
+
+
+un autre
+
+< 220 Welcome to muthreads ftp server (v 0.5).
+
+> USER deleuzec
+
+< 331 ...
+
+> PASS XXX
+
+< 230 ...
+
+> SYST
+
+< 215 Unix / OCaml with muthreads.
+
+> CWD /tmp
+
+< 250 ...
+
+> PORT 127,0,0,1,194,240
+
+< 200 ...
+
+> RETR R
+
+< 150 ...
+		     wireshark nous dit... 3 octets
+> ÿô                 ff f4 ff avec bit URG
+< 500 ...
+
+< 226 ...
+
+> òABOR		     f2 puis ABOR
+
+< 500 Bad command.
+
+> PORT 127,0,0,1,208,209
+
+< 200 ...
+
+> QUIT
+
+< 400 ...
+
+Warning: uncaught exception
+Fatal error: exception Unix.Unix_error(56, "read", "")
+
+la commande ABOR avec IAC et IP telnet est coupée en deux par le
+serveur.  Donc les réponses sont décalées chez le client.  Il voit la
+réponse 500 au PORT, c'est pour ça qu'il fait un QUIT.
+
+et après ?
+
+vérifier que pas de bug dans read/write_or_take des DTP... (ou du PI
+en phase controlling_transfer...)
+
+--> client envoie le QUIT, lit le 200, ferme la connexion.  À ce
+    moment le 400 est écrit/arrive, TCP client envoie un RST.
+
+
+même scénario (plus long) sur un write
+
+
+< 220 Welcome to muthreads ftp server (v 0.5).
+
+> USER guest
+
+< 331 ...
+
+> PASS secret
+
+< 230 ...
+
+> SYST
+
+< 215 Unix / OCaml with muthreads.
+
+> CWD /tmp
+
+< 250 ...
+
+> PORT 127,0,0,1,128,89
+
+< 200 ...
+
+> RETR R
+
+< 150 ...
+
+> ÿô
+< 500 ...
+
+< 226 ...
+
+> òABOR
+
+< 500 Bad command.
+
+> PORT 127,0,0,1,209,24
+
+< 200 ...
+
+> PWD
+
+< 400 ...
+
+> PORT 127,0,0,1,225,113
+
+< 200 ...
+
+> PORT 127,0,0,1,217,235
+
+< 400 ...
+
+> LIST
+
+< 500 ...
+
+> PWD
+
+< 257 "/tmp" is current directory.
+
+> XPWD
+
+< 500 Bad command.
+
+> PORT 127,0,0,1,166,149
+
+< 200 ...
+
+> PWD
+
+< 400 ...
+
+> PWD
+
+< 257 "/tmp" is current directory.
+
+> PWD
+
+< 257 "/tmp" is current directory.
+
+> PORT 127,0,0,1,129,24
+
+< 200 ...
+
+> LIST
+
+< 150 ...
+
+< 226 ...
+
+> PORT 127,0,0,1,204,50
+
+< 200 ...
+
+> QUIT
+
+< 400 ...
+
+Warning: uncaught exception
+Fatal error: exception Unix.Unix_error(56, "write", "")
+
+--> même scénario.  Client envoie QUIT, lit 200, ferme.  Serveur veut
+    écrire 400
+
+
+http://unix.derkeiler.com/Newsgroups/comp.unix.programmer/2007-08/msg00171.html
+
+The TCP answers with RESET when you try to send some data to peer that
+does not want to read that data. In other words the peer has closed
+connection or has done shutdown of reading.
+
+Normally, if the peer closes connection, recv returns 0 without any
+error. The same applies to the cases when the peer application crashes.
+
+Now, if you try to send the data to peer after you got 0 from recv,
+you should get RESET. If you try to send the data after you got RESET,
+you'll get EPIPE or SIGPIPE.
+
+So, theoretically, you can see ECONNRESET in recv only if the peer does
+shutdown(SHUT_RD) and you try to send some data after this. Which
+usually never happens :) More often the peer closes socket unexpectedly
+while you are sending many chunks of data and as result you get
+SIGPIPE, because your first send triggers RESET, and your second send
+triggers SIGPIPE, because you didn't see the RESET.
+
+http://unix.derkeiler.com/Newsgroups/comp.unix.programmer/2007-08/msg00177.html
+
+Actually, a more common cause is that the peer uses the SO_LINGER
+option, sets l_onoff to 1 (true) and l_linger to 0 (zero time), then
+closes the socket. On systems that implement BSD sockets properly,
+that causes the system to emit TCP RST and blow away the connection.
+Your application will then see ECONNRESET or SIGPIPE or EPIPE,
+depending on where it was when the message was received.
+
+
+-------
+
+si ECONNRESET, on log et termine le thread.
+
+si PI pendant DTP, il faut avorter le DTP
+si DTP, il faut signaler la terminaison au PI
+
+
+
+----
+ avec client.ml
+
+encore ce ECONNRESET
+
+-------------------------------
+open Muthr
+
+
+let wait_forever () =
+  let mv = make_mvar ()
+  in
+  take_mvar mv >>= nothing
+
+    
+let timeout_at t op exp nor =
+  let t1 = Unix.gettimeofday ()
+  in
+  timeout (t -. t1)
+    op exp nor
+
+(* erreur subtile avec fun () -> c (); wait_forever ()) pour le test2 !
+   voir système de type-monades pour détecter ce type d'erreur ?
+*)
+
+(* cette version compense le retard pris par le thread en attente
+d'éxécution, en utilisant une date absolue -> garantit la fréquence
+(sauf si saturation... *)
+
+(* TODO: check if context grows at each iteration... *)
+
+let doevery d c =
+  let rec loop t c =
+    timeout_at t
+      (fun () -> c >>= wait_forever)
+      (fun () -> loop (t+.d) c)
+      nothing
+  in
+  loop (Unix.gettimeofday () +. d) c
+
+let test d f =
+  let t () = doevery d f
+  in
+  spawn t;
+  start ()
+
+
+let test1 () = test 2. (fun k -> print_string "toto\n"; k ())
+
+
+let test2 () =
+  test 2.
+    (fun k ->
+      sleep 1. >>= fun () ->
+      print_string "tata\n"; k ())
+
+let test3 () =
+  let t () =
+    doevery 2. (fun k -> print_string "titi\n"; k ())
+  in
+  (* this thread creates delay in the system *)
+  let rec p () = for i=1 to 10000000 do () done; sleep 1. >>= p
+  in
+  spawn t;
+  spawn p;
+  start ()
+
+
+let buf = String.create 255
+
+let send s cmd k =
+  write s cmd 0 (String.length cmd) >>= fun _ ->
+  read s buf 0 255 >>= fun _ ->
+  print_string buf;
+  k ()
+
+let client host port =
+  let s = socket Unix.PF_INET Unix.SOCK_STREAM 0
+  in
+  let ip = (Unix.gethostbyname host).Unix.h_addr_list.(0)
+  in
+  connect s (Unix.ADDR_INET(ip, port)) >>= fun () ->
+  send s "USER: guest" >>= fun () ->
+  send s "PASS: invité+" >>= fun () ->
+  close s
+;;
+
+client "127.0.0.1" 3000
+-----------------------------
+
+< 220 Welcome to muthreads ftp server (v 0.5, July 1st, 2009).
+
+Warning: uncaught exception
+Unix.Unix_error(56, "read", "")Fatal error: exception Unix.Unix_error(56, "read", "")
+
+
+------
+autre:
+segfault avec grand nombre de clients
+seteuid pas en cause (aussi quand set_user désactivé)
+apparemment causé par pam...

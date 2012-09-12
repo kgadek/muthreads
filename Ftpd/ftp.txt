@@ -1,0 +1,221 @@
+packages clients
+----------------
+
+ftp (netkit)
+gftp (gtk et text)
+inetutils-ftp
+jftp
+lftp (scriptable)
+ncftp
+tnftp
+[zftp]
+cftp
+ftp-upload (pour scripts)
+
+
+packages-serveurs
+-----------------
+wu-ftpd
+ftpd (netkit)
+inetutils-ftpd
+krb5-ftpd
+muddleftpd
+proftpd
+pure-ftpd
+pyftpd
+twoftpd
+vsftpd
+
+
+autres packages
+---------------
+
+voir package ftp-proxy
+
+tests : ftp-upload ?
+
+
+remarques sur rfc959
+--------------------
+
+commande PORT optionnelle (port par défaut)
+
+p19-20 the stream transfert mode is inherently reliable ...
+
+PASV créé pour les tranferts entre serveurs ?
+
+erreurs
+
+* réponse à CWD = 200 ou 250 ?
+  250 dans les Command-Reply sequences (sec 5.4)
+  200 dans les exemples de l'appendix II
+
+* réponse à MKD existant = 521 (appendix II) mais n'apparait pas dans
+  la liste des réponses (sec. 4.2), ni dans la liste des séquences
+  (sec 5.4)
+
+* STOU
+  The 250 Transfer Started response must include the name generated.
+  c'est 150 ?
+  wu-ftpd l'indique dans le 150 et le 226
+
+rfc2389
+-------
+
+ajoute FEAT
+
+rfc3659
+-------
+
+redéfinit REST  arg = nb d'octets à sauter (0 annule)
+
+avec REST APPE peut être interdit ou identique à STOR
+STOU effet indéfini
+
+ajoute MDTM MLST MLSD
+SIZE : nb d'octets à transférer, dans le mode courant (y compris T_A)
+
+indique qu'on n'utilise pas de wildcard dans les noms de fichier
+(expansion à faire par le client)
+
+
+----
+
+test avec netcat en upload
+cat ffff | netcat -q 0 -l -p 1025
+
+-q 0 sinon netcat ne ferme pas la connexion !
+
+
+
+------
+
+wu-ftpd
+
+timeout - ferme connexion controle après 900 secondes. (421)
+
+après PASV, une commande de transfert provoque l'attente
+d'établissement de la connexion -> le PI est bloqué! 
+(pendant qqes minutes, puis répond 425 Can't open data connection)
+
+
+les autres commandes (ABOR, QUIT,...) sont traitées
+(mais ABORT n'annule rien puisque le transfert n'a pas commencé)
+
+accepte des commandes intermédiaires entre PASV et transfert
+
+--
+donc, se met en listen dès que la commande PASV est traitée...
+
+
+sans commande PORT, tente d'établir la connexion avec le port de
+contrôle du client (donc 425)
+
+au SYST répond 215 UNIX Type: L8
+du coup, netkit FTP choisit d'office le mode binaire
+
+
+client netkit FTP pignole si ls après restart -> prend du retard sur
+les réponses (et fait planter serveur sur write...)
+
+
+* REST
+
+client netkit-ftp, server wu-ftpd
+serveur demande un RETR ou STOR après le REST
+client envoie un APPE que le serveur accepte comme sans REST (alors
+que le client transmet à partir du 50 ième octet !)
+
+ftp> put moonbug.txt
+local: moonbug.txt remote: moonbug.txt
+---> TYPE I
+200 Type set to I.
+ftp: setsockopt (ignored): Permission denied
+---> PORT 127,0,0,1,230,42
+200 PORT command successful.
+---> STOR moonbug.txt
+150 Opening BINARY mode data connection for moonbug.txt.
+226 Transfer complete.
+1594 bytes sent in 0.02 secs (103.2 kB/s)
+ftp> append moonbug.txt moonbug.txt
+local: moonbug.txt remote: moonbug.txt
+ftp: setsockopt (ignored): Permission denied
+---> PORT 127,0,0,1,218,189
+200 PORT command successful.
+---> APPE moonbug.txt
+150 Opening BINARY mode data connection for moonbug.txt.
+226 Transfer complete.
+1594 bytes sent in 0.00 secs (18983.4 kB/s)
+
+ftp> restart 50
+restarting at 50. execute get, put or append to initiate transfer
+ftp> append moonbug.txt moonbug.txt
+local: moonbug.txt remote: moonbug.txt
+ftp: setsockopt (ignored): Permission denied
+---> PORT 127,0,0,1,212,1
+200 PORT command successful.
+---> REST 50
+350 Restarting at 50. Send STORE or RETRIEVE to initiate transfer.
+---> APPE moonbug.txt
+150 Opening BINARY mode data connection for moonbug.txt.
+226 Transfer complete.
+1544 bytes sent in 0.00 secs (2138.7 kB/s)
+
+
+----------------
+ftp> !rm tcc.tgz
+*** glibc detected *** ftp: corrupted double-linked list: 0x083edfc0 ***
+======= Backtrace: =========
+/lib/libc.so.6[0xb7db3845]
+/lib/libc.so.6[0xb7db3ae4]
+/lib/libc.so.6[0xb7db59a5]
+/lib/libc.so.6(__libc_malloc+0x96)[0xb7db7586]
+/lib/libc.so.6(_obstack_begin+0x5c)[0xb7db98fc]
+ftp[0x8053e21]
+ftp[0x8054327]
+/lib/libc.so.6(__libc_start_main+0xe5)[0xb7d5f455]
+ftp[0x8049b31]
+======= Memory map: ========
+08048000-08058000 r-xp 00000000 03:05 489676     /usr/bin/netkit-ftp
+08058000-0805a000 rw-p 0000f000 03:05 489676     /usr/bin/netkit-ftp
+0805a000-08067000 rw-p 0805a000 00:00 0 
+083de000-083ff000 rw-p 083de000 00:00 0          [heap]
+b7a00000-b7a21000 rw-p b7a00000 00:00 0 
+b7a21000-b7b00000 ---p b7a21000 00:00 0 
+b7b50000-b7b5c000 r-xp 00000000 03:05 261159     /lib/libgcc_s.so.1
+b7b5c000-b7b5d000 rw-p 0000b000 03:05 261159     /lib/libgcc_s.so.1
+b7b69000-b7bbf000 r--p 00000000 03:05 114377     /usr/lib/locale/locale-archive
+b7bbf000-b7bc7000 r-xp 00000000 03:05 718326     /lib/libnss_nis-2.7.so
+b7bc7000-b7bc9000 rw-p 00007000 03:05 718326     /lib/libnss_nis-2.7.so
+b7bc9000-b7bdc000 r-xp 00000000 03:05 718188     /lib/libnsl-2.7.so
+b7bdc000-b7bde000 rw-p 00012000 03:05 718188     /lib/libnsl-2.7.so
+b7bde000-b7be0000 rw-p b7bde000 00:00 0 
+b7be0000-b7be7000 r-xp 00000000 03:05 718191     /lib/libnss_compat-2.7.so
+b7be7000-b7be9000 rw-p 00006000 03:05 718191     /lib/libnss_compat-2.7.so
+b7be9000-b7bfd000 r-xp 00000000 03:05 718434     /lib/libpthread-2.7.so
+b7bfd000-b7bff000 rw-p 00013000 03:05 718434     /lib/libpthread-2.7.so
+b7bff000-b7c01000 rw-p b7bff000 00:00 0 
+b7c01000-b7d31000 r-xp 00000000 03:05 572081     /usr/lib/libdb-4.6.so
+b7d31000-b7d34000 rw-p 00130000 03:05 572081     /usr/lib/libdb-4.6.so
+b7d34000-b7d3d000 r-xp 00000000 03:05 718305     /lib/libnss_files-2.7.so
+b7d3d000-b7d3f000 rw-p 00008000 03:05 718305     /lib/libnss_files-2.7.so
+b7d3f000-b7d43000 r-xp 00000000 03:05 571887     /usr/lib/libnss_db-2.2.3.so
+b7d43000-b7d44000 rw-p 00004000 03:05 571887     /usr/lib/libnss_db-2.2.3.so
+b7d44000-b7d45000 rw-p b7d44000 00:00 0 
+b7d45000-b7d47000 r-xp 00000000 03:05 718179     /lib/libdl-2.7.so
+b7d47000-b7d49000 rw-p 00001000 03:05 718179     /lib/libdl-2.7.so
+b7d49000-b7e81000 r-xp 00000000 03:05 718152     /lib/libc-2.7.so
+b7e81000-b7e82000 r--p 00138000 03:05 718152     /lib/libc-2.7.so
+b7e82000-b7e84000 rw-p 00139000 03:05 718152     /lib/libc-2.7.so
+b7e84000-b7e88000 rw-p b7e84000 00:00 0 
+b7e88000-b7eb7000 r-xp 00000000 03:05 261424     /lib/libncurses.so.5.7
+b7eb7000-b7eba000 rw-p 0002f000 03:05 261424     /lib/libncurses.so.5.7
+b7eba000-b7ee7000 r-xp 00000000 03:05 294015     /lib/libreadline.so.5.2
+b7ee7000-b7eeb000 rw-p 0002d000 03:05 294015     /lib/libreadline.so.5.2
+b7eeb000-b7eec000 rw-p b7eeb000 00:00 0 
+b7ef4000-b7efa000 rw-p b7ef4000 00:00 0 
+b7efa000-b7efb000 r-xp b7efa000 00:00 0          [vdso]
+b7efb000-b7f15000 r-xp 00000000 03:05 718132     /lib/ld-2.7.so
+b7f15000-b7f17000 rw-p 0001a000 03:05 718132     /lib/ld-2.7.so
+bfc02000-bfc17000 rw-p bffeb000 00:00 0          [stack]
+Abandon

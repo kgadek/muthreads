@@ -1,0 +1,57 @@
+buf_size = 1500, make larger?
+
+current code assumes FTP commands are not cut among several TCP reads
+
+* bugs
+
+
+** SOLVED
+telnet send synch (urgent data) causes
+Warning: uncaught exception, thread killed! Unix.Unix_error(2, "read", "")
+2 = EAGAIN
+
+corrected by enabling trying Unix.read in Muthread readb
+
+why?
+version without trying immediately the read:
+  - add fd in rfd, put Read _ in readers.
+
+  - check_io does select, fd put in rdo,
+    Unix.read performed without enclosing try
+    why exception EAGAIN raised there?
+
+the cap shows the two characters are read, the answer is sent
+send synch is 0xFF, then 0xF2 as urgent data...
+
+the answer is to the first char 0xFF, the read fails on the second one.
+
+as man 7 tcp says, by default urgent data is not put in the data
+stream, so I guess the select says data is available but that's urgent
+data so nothing can be read without the MSG_OOB flag to read
+
+
+** libpam apparently segfaults in native code
+for user deleuzec, at second transfer (why ?)
+does not segfaults if pam not used...
+ok in bytecode
+
+set_user seems ok
+
+
+** set_user fait planter (freeze) (amd64 ?)
+non reproduced
+
+--- à clarifier en amd64
+Needed packages (debian squeeze)
+
+libpam0g
+libpam0g-dev
+libpam-ocaml
+libpam-ocaml-dev
+
+
+[libpam-runtime -- required on almost all installations]
+-----
+avec godi
+debian libpam0g-dev
+source ocamlpam-1.1.tar.gz
