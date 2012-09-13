@@ -74,6 +74,9 @@ and context = ctxt_elt list
 let ctxt = ref []
 let io = ref (ref Nofd)
 
+let incf rf = rf := !rf + 1
+let decf rf = rf := !rf - 1
+
 (* [runq] is a FIFO of currently runnable threads.  [enqueue] and
    [dequeue] add/get a thread in/from [runq].  [continue k] adds the
    continuation [k] of the current thread in [runq], using the current
@@ -88,11 +91,12 @@ let io = ref (ref Nofd)
  *)
 
 let runq = Queue.create ()
-let enqueue p  = Queue.push p runq
-let dequeue () = Queue.take runq
+let runqsize = ref 0
+let enqueue p  = incf runqsize; Queue.push p runq
+let dequeue () = decf runqsize; Queue.take runq
 
-let continue  k = Queue.push (!io, !ctxt, k) runq
-let context c k = Queue.push (!io, c , k) runq
+let continue  k = incf runqsize; Queue.push (!io, !ctxt, k) runq
+let context c k = decf runqsize; Queue.push (!io, c , k) runq
 
 let term = ref true
 
@@ -429,7 +433,7 @@ let sched () =
   in
   enqueue (ref Nofd, [], check_io);
   try
-    while (Queue.length runq) > 1 do
+    while !runqsize > 1 do
       term := true;
       let (l, c, f) as p = dequeue () in begin
 	dbg_ctxt c;
