@@ -14,6 +14,11 @@
 %% Spawns N worker threads, each will open FTP session, run benchmark specified
 %% in module Mod and then quit.
 %%
+%% Each Module has to export inets_params/0 and benchmark/2. First should return
+%% assoc-list with options for inets:start(ftpc, ...). The latter should run
+%% actual benchmark; first parameter is Pid of a FTP session, second is
+%% a globally-unique string.
+%%
 %% If everything goes fine, returns {ok, L}, where L is a list of integers indicating
 %% time of running FTP commands from each worker.
 %%
@@ -95,6 +100,8 @@ prepare(Parent, Mod) ->
 		abort -> noop
 	end.
 
+-spec behaviour_info(_) -> 'undefined' | [{'benchmark',2} | {'inets_params',0},...].
+%% @doc Behaviour specification.
 behaviour_info(callbacks) ->
 	[{inets_params, 0},
 		{benchmark, 2}];
