@@ -9,4 +9,4 @@ inets_params() -> [].
 benchmark(Pid, Uniq) ->
 	ok = ftp:user(Pid, "anonymous", "anonymous"),
 	ok = ftp:cd(Pid, "lol"),
-	ok = ftp:send(Pid, "lol", "lol"++Uniq).
+	ok = ftp:send(Pid, "bench01.erl", "bench01.erl."++Uniq).
