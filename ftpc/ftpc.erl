@@ -131,8 +131,11 @@ prepare(Parent, Mod) ->
         run ->
             {_N1,O1,W1} = os:timestamp(),
             {ok,Pid} = inets:start(ftpc, InetsParams),
-            Mod:benchmark(Pid, Suffix),
-            inets:stop(ftpc, Pid),
+            try
+				Mod:benchmark(Pid, Suffix)
+			after
+				inets:stop(ftpc, Pid)
+			end,
             {_N2,O2,W2} = os:timestamp(),
             Parent ! {ftpc_done, (O2-O1)*1000000 + (W2-W1)};
         abort -> noop
